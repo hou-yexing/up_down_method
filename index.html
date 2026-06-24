@@ -627,7 +627,7 @@ function renderSummary(a) {
     ["单位", a.params.unit],
     ["推断/指定步长", fmtUnit(a.d, a.params.unit)],
     ["失效/通过", `${a.responses.filter(Boolean).length}/${a.responses.filter(x => !x).length}`],
-    ["Gao 对子数", `${a.paired.nPairs}/${a.paired.requiredPairs ?? "-"}`]
+    ["Gao 子对数（实际/所需）", `实际 ${a.paired.nPairs} / 所需 ${a.paired.requiredPairs ?? "-"}`]
   ];
   $("summaryGrid").innerHTML = stats.map(([label, value]) => `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div></div>`).join("");
 }
