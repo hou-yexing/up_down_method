@@ -695,18 +695,20 @@ function drawChart(a) {
   const w = canvas.width, h = canvas.height;
   ctx.clearRect(0, 0, w, h);
   ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
-  const pad = { l: 70, r: 24, t: 28, b: 54 };
+  const pad = { l: 92, r: 24, t: 28, b: 54 };
   const loads = a.loads;
   const minY = Math.min(...loads) - a.d * 0.8, maxY = Math.max(...loads) + a.d * 0.8;
   const xScale = i => pad.l + (w - pad.l - pad.r) * (loads.length === 1 ? 0.5 : i / (loads.length - 1));
   const yScale = y => h - pad.b - (h - pad.t - pad.b) * ((y - minY) / Math.max(1e-9, maxY - minY));
   ctx.strokeStyle = "#d9e0ea"; ctx.lineWidth = 1;
   ctx.font = "12px Microsoft YaHei, Arial"; ctx.fillStyle = "#667085";
+  ctx.textAlign = "right";
+  ctx.textBaseline = "alphabetic";
   const ticks = 5;
   for (let t = 0; t <= ticks; t++) {
     const yVal = minY + (maxY - minY) * t / ticks, y = yScale(yVal);
     ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
-    ctx.fillText(fmt(yVal), 10, y + 4);
+    ctx.fillText(fmt(yVal), pad.l - 12, y + 4);
   }
   ctx.strokeStyle = "#96a5b8"; ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, h - pad.b); ctx.lineTo(w - pad.r, h - pad.b); ctx.stroke();
   ctx.strokeStyle = "#1464a5"; ctx.lineWidth = 2; ctx.beginPath();
@@ -725,7 +727,7 @@ function drawChart(a) {
   ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#1f2937"; ctx.font = "bold 14px Microsoft YaHei, Arial";
   ctx.fillText("o = 通过 / X = 失效；青色描边 = Gao 已配对点", pad.l, 18);
   ctx.fillStyle = "#667085"; ctx.font = "12px Microsoft YaHei, Arial"; ctx.fillText("试验序号", w / 2 - 20, h - 12);
-  ctx.save(); ctx.translate(18, h / 2 + 40); ctx.rotate(-Math.PI / 2); ctx.fillText("载荷/应力", 0, 0); ctx.restore();
+  ctx.save(); ctx.translate(18, h / 2 + 38); ctx.rotate(-Math.PI / 2); ctx.textAlign = "center"; ctx.fillText(loadLabel(a.params.unit), 0, 0); ctx.restore();
 }
 
 function xmlEscape(value) {
