@@ -174,6 +174,12 @@ canvas { width: 100%; max-width: 100%; border: 1px solid var(--line); border-rad
   .params, .summary-grid, .method-grid { grid-template-columns: 1fr; }
   header { padding: 18px; }
 }
+@media print {
+  body { background: #fff; }
+  header, .left, .footer-row button { display: none !important; }
+  main { display: block; width: auto; margin: 0; }
+  section { box-shadow: none; break-inside: avoid; }
+}
 </style>
 </head>
 <body>
@@ -195,7 +201,7 @@ canvas { width: 100%; max-width: 100%; border: 1px solid var(--line); border-rad
       <div class="body">
         <div class="table-wrap">
           <table>
-            <thead><tr><th style="width:70px;">序号</th><th>载荷/应力</th><th>结果</th><th style="width:48px;"></th></tr></thead>
+            <thead><tr><th style="width:70px;">序号</th><th id="loadHeader">载荷/应力 (kN)</th><th>结果</th><th style="width:48px;"></th></tr></thead>
             <tbody id="dataBody"></tbody>
           </table>
         </div>
@@ -204,6 +210,7 @@ canvas { width: 100%; max-width: 100%; border: 1px solid var(--line); border-rad
     <section>
       <div class="section-head"><h2>分析参数</h2></div>
       <div class="body grid params">
+        <label>单位<select id="unitInput"><option value="kN">kN</option><option value="MPa">MPa</option><option value="Nm">Nm</option><option value="无量纲">无量纲</option></select></label>
         <label>步长 d（留空自动推断）<input id="stepInput" type="number" step="any" placeholder="自动"></label>
         <label>显著性 alpha<input id="alphaInput" type="number" step="0.01" min="0.001" max="0.5" value="0.05"></label>
         <label>Bootstrap 次数<input id="bootInput" type="number" min="50" max="20000" step="50" value="3000"></label>
@@ -217,6 +224,7 @@ canvas { width: 100%; max-width: 100%; border: 1px solid var(--line); border-rad
           <button id="testBtn">自检</button>
           <button class="primary" id="analyzeBtn">计算评估</button>
           <button id="exportBtn" disabled>导出 Word</button>
+          <button id="pdfBtn" disabled>导出 PDF</button>
         </div>
       </div>
     </section>
@@ -260,6 +268,10 @@ function fmt(value, digits = 3) {
   return Number.isFinite(value) ? Number(value).toFixed(digits).replace(/\.?0+$/, "") : "-";
 }
 function fmtCi(ci) { return ci && Number.isFinite(ci[0]) && Number.isFinite(ci[1]) ? `[${fmt(ci[0])}, ${fmt(ci[1])}]` : "-"; }
+function unitSuffix(unit) { return unit && unit !== "无量纲" ? ` ${unit}` : ""; }
+function fmtUnit(value, unit, digits = 3) { return Number.isFinite(value) ? `${fmt(value, digits)}${unitSuffix(unit)}` : "-"; }
+function fmtCiUnit(ci, unit) { return ci && Number.isFinite(ci[0]) && Number.isFinite(ci[1]) ? `[${fmtUnit(ci[0], unit)}, ${fmtUnit(ci[1], unit)}]` : "-"; }
+function loadLabel(unit) { return unit && unit !== "无量纲" ? `载荷/应力 (${unit})` : "载荷/应力 (无量纲)"; }
 function mean(arr) { return arr.reduce((a, b) => a + b, 0) / arr.length; }
 function sampleStd(arr) {
   if (arr.length < 2) return NaN;
@@ -531,8 +543,9 @@ function pairedMidpointBootstrap(pairValues, nBootstrap, alpha, seed) {
 function parseRows() {
   const rows = Array.from($("dataBody").querySelectorAll("tr")).map((tr, idx) => {
     const inputs = tr.querySelectorAll("input");
-    return { order: inputs[0].value.trim() ? Number(inputs[0].value) : idx + 1, loadRaw: inputs[1].value.trim(), resultRaw: inputs[2].value.trim() };
-  }).filter(r => r.loadRaw !== "" || r.resultRaw !== "");
+    const resultSelect = tr.querySelector("select");
+    return { order: inputs[0].value.trim() ? Number(inputs[0].value) : idx + 1, loadRaw: inputs[1].value.trim(), resultRaw: resultSelect.value };
+  }).filter(r => r.loadRaw !== "");
   if (!rows.length) throw new Error("请至少输入一行有效试验数据。");
   return rows.map((r, idx) => {
     const load = Number(r.loadRaw);
@@ -546,13 +559,15 @@ function getParams() {
   const mleBootstrap = Number($("mleBootInput").value);
   const seed = Number($("seedInput").value);
   const stepRaw = $("stepInput").value.trim();
+  const unit = $("unitInput").value;
   if (!(alpha > 0 && alpha < 0.5)) throw new Error("alpha 必须在 0 到 0.5 之间。");
   if (!(bootstrap >= 10) || !(mleBootstrap >= 10)) throw new Error("Bootstrap 次数过小。");
-  return { step: stepRaw ? Number(stepRaw) : null, alpha, bootstrap: Math.floor(bootstrap), mleBootstrap: Math.floor(mleBootstrap), seed, requireClosed: $("closedInput").checked };
+  return { unit, step: stepRaw ? Number(stepRaw) : null, alpha, bootstrap: Math.floor(bootstrap), mleBootstrap: Math.floor(mleBootstrap), seed, requireClosed: $("closedInput").checked };
 }
 function analyzeData() {
   const rows = parseRows();
   const params = getParams();
+  $("loadHeader").textContent = loadLabel(params.unit);
   const loads = rows.map(r => r.load);
   const responses = rows.map(r => r.response);
   const d = params.step || inferStep(loads);
@@ -576,9 +591,15 @@ function analyzeData() {
 
 function addRow(order = "", load = "", result = "") {
   const tr = document.createElement("tr");
-  tr.innerHTML = `<td><input value="${escapeHtml(order)}" inputmode="numeric"></td><td><input value="${escapeHtml(load)}" inputmode="decimal"></td><td><input value="${escapeHtml(result)}" placeholder="o / X"></td><td class="row-tools"><button class="mini danger" title="删除">删</button></td>`;
+  const normalized = normalizeResultOption(result);
+  tr.innerHTML = `<td><input value="${escapeHtml(order)}" inputmode="numeric"></td><td><input value="${escapeHtml(load)}" inputmode="decimal"></td><td><select><option value="o"${normalized === "o" ? " selected" : ""}>通过 / o</option><option value="X"${normalized === "X" ? " selected" : ""}>失效 / X</option></select></td><td class="row-tools"><button class="mini danger" title="删除">删</button></td>`;
   tr.querySelector("button").addEventListener("click", () => tr.remove());
   $("dataBody").appendChild(tr);
+}
+function normalizeResultOption(result) {
+  const raw = String(result ?? "").trim();
+  if (!raw) return "o";
+  try { return normalizeResponse(raw) ? "X" : "o"; } catch { return "o"; }
 }
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
@@ -603,7 +624,8 @@ function renderSummary(a) {
   $("validBadge").textContent = `Gao ${pairedStatus}`;
   const stats = [
     ["有效点数", a.rows.length],
-    ["推断/指定步长", fmt(a.d)],
+    ["单位", a.params.unit],
+    ["推断/指定步长", fmtUnit(a.d, a.params.unit)],
     ["失效/通过", `${a.responses.filter(Boolean).length}/${a.responses.filter(x => !x).length}`],
     ["Gao 对子数", `${a.paired.nPairs}/${a.paired.requiredPairs ?? "-"}`]
   ];
@@ -615,30 +637,30 @@ function renderMethods(a) {
     <div class="method-card">
       <h3>Dixon-Mood ${badge(a.dixon.valid)}</h3>
       <div class="kv">
-        <span>均值</span><span>${fmt(a.dixon.meanHat)}</span>
-        <span>标准差</span><span>${fmt(a.dixon.stdHat)}</span>
+        <span>均值</span><span>${fmtUnit(a.dixon.meanHat, a.params.unit)}</span>
+        <span>标准差</span><span>${fmtUnit(a.dixon.stdHat, a.params.unit)}</span>
         <span>统计组</span><span>${a.dixon.group || "-"}</span>
-        <span>均值区间</span><span>${fmtCi(a.dixon.ci.meanCi)}</span>
-        <span>标准差区间</span><span>${fmtCi(a.dixon.ci.stdCi)}</span>
+        <span>均值区间</span><span>${fmtCiUnit(a.dixon.ci.meanCi, a.params.unit)}</span>
+        <span>标准差区间</span><span>${fmtCiUnit(a.dixon.ci.stdCi, a.params.unit)}</span>
         <span>Bootstrap有效</span><span>${a.dixon.ci.nValid}</span>
       </div>
     </div>
     <div class="method-card">
       <h3>MLE ${badge(a.mle.valid)}</h3>
       <div class="kv">
-        <span>均值</span><span>${fmt(a.mle.meanHat)}</span>
-        <span>标准差</span><span>${fmt(a.mle.stdHat)}</span>
+        <span>均值</span><span>${fmtUnit(a.mle.meanHat, a.params.unit)}</span>
+        <span>标准差</span><span>${fmtUnit(a.mle.stdHat, a.params.unit)}</span>
         <span>对数似然</span><span>${fmt(a.mle.logLikelihood)}</span>
-        <span>均值区间</span><span>${fmtCi(a.mle.ci.meanCi)}</span>
-        <span>标准差区间</span><span>${fmtCi(a.mle.ci.stdCi)}</span>
+        <span>均值区间</span><span>${fmtCiUnit(a.mle.ci.meanCi, a.params.unit)}</span>
+        <span>标准差区间</span><span>${fmtCiUnit(a.mle.ci.stdCi, a.params.unit)}</span>
         <span>Bootstrap有效</span><span>${a.mle.ci.nValid}</span>
       </div>
     </div>
     <div class="method-card">
       <h3>Gao 配对 ${badge(a.paired.valid)}</h3>
       <div class="kv">
-        <span>均值</span><span>${fmt(a.paired.meanHat)}</span>
-        <span>标准差</span><span>${fmt(a.paired.stdHat)}</span>
+        <span>均值</span><span>${fmtUnit(a.paired.meanHat, a.params.unit)}</span>
+        <span>标准差</span><span>${fmtUnit(a.paired.stdHat, a.params.unit)}</span>
         <span>CV</span><span>${fmt(a.paired.cv, 5)}</span>
         <span>闭合</span><span>${a.paired.closed ? "是" : "否"}</span>
         <span>对子数</span><span>${a.paired.nPairs}</span>
@@ -650,10 +672,10 @@ function renderMethods(a) {
     <div class="method-card wide">
       <h3>Gao 配对 Bootstrap 与参数区间</h3>
       <div class="kv">
-        <span>配对均值区间</span><span>${fmtCi(a.paired.parametricCi.meanCi)}（参数 t 区间）</span>
-        <span>配对标准差区间</span><span>${fmtCi(a.paired.parametricCi.stdCi)}（卡方近似）</span>
-        <span>Bootstrap均值</span><span>${fmtCi(a.pairedBootstrap.meanCi)}</span>
-        <span>Bootstrap标准差</span><span>${fmtCi(a.pairedBootstrap.stdCi)}</span>
+        <span>配对均值区间</span><span>${fmtCiUnit(a.paired.parametricCi.meanCi, a.params.unit)}（参数 t 区间）</span>
+        <span>配对标准差区间</span><span>${fmtCiUnit(a.paired.parametricCi.stdCi, a.params.unit)}（卡方近似）</span>
+        <span>Bootstrap均值</span><span>${fmtCiUnit(a.pairedBootstrap.meanCi, a.params.unit)}</span>
+        <span>Bootstrap标准差</span><span>${fmtCiUnit(a.pairedBootstrap.stdCi, a.params.unit)}</span>
         <span>Bootstrap CV</span><span>${fmtCi(a.pairedBootstrap.cvCi)}</span>
         <span>充足率</span><span>${Number.isFinite(a.pairedBootstrap.adequacyRate) ? fmt(100 * a.pairedBootstrap.adequacyRate, 1) + "%" : "-"}</span>
       </div>
@@ -712,17 +734,7 @@ function tableXml(rows) {
   return `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="B8C4D3"/><w:left w:val="single" w:sz="4" w:color="B8C4D3"/><w:bottom w:val="single" w:sz="4" w:color="B8C4D3"/><w:right w:val="single" w:sz="4" w:color="B8C4D3"/><w:insideH w:val="single" w:sz="4" w:color="D9E0EA"/><w:insideV w:val="single" w:sz="4" w:color="D9E0EA"/></w:tblBorders></w:tblPr>${rows.map(row => `<w:tr>${row.map(cell => `<w:tc><w:tcPr><w:tcW w:w="2400" w:type="dxa"/></w:tcPr>${para(cell)}</w:tc>`).join("")}</w:tr>`).join("")}</w:tbl>`;
 }
 function reportConclusion(a) {
-  const lines = [];
-  if (a.paired.valid) {
-    lines.push("高振同配对法满足闭合、最少对子数和正标准差要求，可作为本组数据的正式配对升降法评估结果。");
-  } else {
-    lines.push("高振同配对法当前未完全满足正式有效性要求，应结合闭合状态、对子数、CV 和 Bootstrap 区间宽度判断是否需要补充试验。");
-  }
-  if (a.dixon.valid) lines.push("Dixon-Mood 方法给出了可用估计，适合作为传统升降法基准结果。");
-  if (a.mle.valid) lines.push("MLE 利用全序列二元响应，适合与 Dixon-Mood 或配对法结果交叉复核。");
-  if (!a.dixon.valid && !a.mle.valid && !a.paired.valid) lines.push("当前三种主要估计方法均未形成可靠结果，建议优先检查初始载荷、步长、响应判据和样本序列完整性。");
-  lines.push("若不同方法均值差异较大，应检查初始载荷、步长、升降路径是否异常，并结合材料批次、试验环境和失效判据进行工程判断。");
-  return lines.map(text => para(text)).join("");
+  return reportConclusionText(a).map(text => para(text)).join("");
 }
 function imageXml() {
   return `<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="5486400" cy="2407680"/><wp:docPr id="1" name="updown_chart"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="updown_chart.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="5486400" cy="2407680"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
@@ -730,14 +742,14 @@ function imageXml() {
 function buildDocumentXml(a) {
   const methodRows = [
     ["方法", "均值", "均值置信区间", "标准差", "标准差置信区间", "有效性/说明"],
-    ["Dixon-Mood", fmt(a.dixon.meanHat), fmtCi(a.dixon.ci.meanCi), fmt(a.dixon.stdHat), fmtCi(a.dixon.ci.stdCi), a.dixon.valid ? "有效" : "无效"],
-    ["MLE", fmt(a.mle.meanHat), fmtCi(a.mle.ci.meanCi), fmt(a.mle.stdHat), fmtCi(a.mle.ci.stdCi), a.mle.valid ? `有效；最大对数似然 ${fmt(a.mle.logLikelihood)}` : "无效"],
-    ["高振同配对法", fmt(a.paired.meanHat), fmtCi(a.paired.parametricCi.meanCi), fmt(a.paired.stdHat), fmtCi(a.paired.parametricCi.stdCi), a.paired.valid ? "有效" : "未满足有效性要求"],
-    ["配对数据Bootstrap", fmt(a.paired.meanHat), fmtCi(a.pairedBootstrap.meanCi), fmt(a.paired.stdHat), fmtCi(a.pairedBootstrap.stdCi), Number.isFinite(a.pairedBootstrap.adequacyRate) ? `对子数满足率 ${fmt(a.pairedBootstrap.adequacyRate, 3)}` : "对子数不足"]
+    ["Dixon-Mood", fmtUnit(a.dixon.meanHat, a.params.unit), fmtCiUnit(a.dixon.ci.meanCi, a.params.unit), fmtUnit(a.dixon.stdHat, a.params.unit), fmtCiUnit(a.dixon.ci.stdCi, a.params.unit), a.dixon.valid ? "有效" : "无效"],
+    ["MLE", fmtUnit(a.mle.meanHat, a.params.unit), fmtCiUnit(a.mle.ci.meanCi, a.params.unit), fmtUnit(a.mle.stdHat, a.params.unit), fmtCiUnit(a.mle.ci.stdCi, a.params.unit), a.mle.valid ? `有效；最大对数似然 ${fmt(a.mle.logLikelihood)}` : "无效"],
+    ["高振同配对法", fmtUnit(a.paired.meanHat, a.params.unit), fmtCiUnit(a.paired.parametricCi.meanCi, a.params.unit), fmtUnit(a.paired.stdHat, a.params.unit), fmtCiUnit(a.paired.parametricCi.stdCi, a.params.unit), a.paired.valid ? "有效" : "未满足有效性要求"],
+    ["配对数据Bootstrap", fmtUnit(a.paired.meanHat, a.params.unit), fmtCiUnit(a.pairedBootstrap.meanCi, a.params.unit), fmtUnit(a.paired.stdHat, a.params.unit), fmtCiUnit(a.pairedBootstrap.stdCi, a.params.unit), Number.isFinite(a.pairedBootstrap.adequacyRate) ? `对子数满足率 ${fmt(a.pairedBootstrap.adequacyRate, 3)}` : "对子数不足"]
   ];
-  const dataRows = [["序号", "载荷/应力", "结果", "图示"]].concat(a.rows.map(r => [String(r.order), fmt(r.load), r.response ? "失效" : "通过", r.response ? "X" : "o"]));
-  const dixonFrequencyRows = [["载荷级", "载荷", "频数", "i", "i*n", "i²*n"]].concat(
-    (a.dixon.frequencyRows || []).map(row => [String(row.levelIndex + 1), fmt(row.load), String(row.frequency), String(row.i), String(row.iN), String(row.i2N)])
+  const dataRows = [["序号", loadLabel(a.params.unit), "结果", "图示"]].concat(a.rows.map(r => [String(r.order), fmtUnit(r.load, a.params.unit), r.response ? "失效" : "通过", r.response ? "X" : "o"]));
+  const dixonFrequencyRows = [["载荷级", loadLabel(a.params.unit), "频数", "i", "i*n", "i²*n"]].concat(
+    (a.dixon.frequencyRows || []).map(row => [String(row.levelIndex + 1), fmtUnit(row.load, a.params.unit), String(row.frequency), String(row.i), String(row.iN), String(row.i2N)])
   );
   const gaoRows = [
     ["指标", "结果"],
@@ -746,18 +758,18 @@ function buildDocumentXml(a) {
     ["回溯配对子数", String(a.paired.retrospectivePairs)],
     ["所需最少对子数", String(a.paired.requiredPairs ?? "-")],
     ["变异系数", fmt(a.paired.cv, 5)],
-    ["均值参数法置信区间", fmtCi(a.paired.parametricCi.meanCi)],
-    ["标准差参数法置信区间", fmtCi(a.paired.parametricCi.stdCi)],
+    ["均值参数法置信区间", fmtCiUnit(a.paired.parametricCi.meanCi, a.params.unit)],
+    ["标准差参数法置信区间", fmtCiUnit(a.paired.parametricCi.stdCi, a.params.unit)],
     ["未配对点", a.paired.unmatchedIndices.map(i => i + 1).join(", ") || "-"],
     ["95%置信度/5%误差限", a.paired.valid ? "满足" : "未满足"]
   ];
   const gaoPairRows = [["对子", "点1", "点2", "对子中值"]].concat(
-    a.paired.pairIndices.map((pair, idx) => [`P${idx + 1}`, String(pair[0] + 1), String(pair[1] + 1), fmt(a.paired.pairValues[idx])])
+    a.paired.pairIndices.map((pair, idx) => [`P${idx + 1}`, String(pair[0] + 1), String(pair[1] + 1), fmtUnit(a.paired.pairValues[idx], a.params.unit)])
   );
   const gaoBootstrapRows = [
     ["指标", "结果"],
-    ["均值置信区间", fmtCi(a.pairedBootstrap.meanCi)],
-    ["标准差置信区间", fmtCi(a.pairedBootstrap.stdCi)],
+    ["均值置信区间", fmtCiUnit(a.pairedBootstrap.meanCi, a.params.unit)],
+    ["标准差置信区间", fmtCiUnit(a.pairedBootstrap.stdCi, a.params.unit)],
     ["变异系数置信区间", fmtCi(a.pairedBootstrap.cvCi)],
     ["对子数满足率", Number.isFinite(a.pairedBootstrap.adequacyRate) ? fmt(a.pairedBootstrap.adequacyRate, 3) : "-"],
     ["有效Bootstrap样本数", String(a.pairedBootstrap.nValid ?? "-")]
@@ -766,7 +778,7 @@ function buildDocumentXml(a) {
   const body = [
     heading("升降法疲劳强度数据评估报告", 1),
     para(`生成时间：${a.createdAt.toLocaleString()}`),
-    para(`步长 d：${fmt(a.d)}；Bootstrap 次数：${a.params.bootstrap}；MLE Bootstrap 次数：${a.params.mleBootstrap}；置信水平：${fmt((1 - a.params.alpha) * 100, 1)}%；随机种子：${a.params.seed}`),
+    para(`单位：${a.params.unit}；步长 d：${fmtUnit(a.d, a.params.unit)}；Bootstrap 次数：${a.params.bootstrap}；MLE Bootstrap 次数：${a.params.mleBootstrap}；置信水平：${fmt((1 - a.params.alpha) * 100, 1)}%；随机种子：${a.params.seed}`),
     heading("1. 原始升降法结果表", 1), tableXml(dataRows),
     heading("2. 数据校核", 1), notes,
     heading("3. 升降过程图", 1), imageXml(),
@@ -798,6 +810,95 @@ function buildDocxBlob(a) {
     "word/media/updown_chart.png": pngBytes
   };
   return new Blob([zipStore(files)], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+}
+function htmlTable(rows) {
+  return `<table>${rows.map((row, idx) => `<tr>${row.map(cell => `${idx === 0 ? "th" : "td"}`).map((tag, i) => `<${tag}>${escapeHtml(row[i])}</${tag}>`).join("")}</tr>`).join("")}</table>`;
+}
+function buildReportTables(a) {
+  return {
+    methodRows: [
+      ["方法", "均值", "均值置信区间", "标准差", "标准差置信区间", "有效性/说明"],
+      ["Dixon-Mood", fmtUnit(a.dixon.meanHat, a.params.unit), fmtCiUnit(a.dixon.ci.meanCi, a.params.unit), fmtUnit(a.dixon.stdHat, a.params.unit), fmtCiUnit(a.dixon.ci.stdCi, a.params.unit), a.dixon.valid ? "有效" : "无效"],
+      ["MLE", fmtUnit(a.mle.meanHat, a.params.unit), fmtCiUnit(a.mle.ci.meanCi, a.params.unit), fmtUnit(a.mle.stdHat, a.params.unit), fmtCiUnit(a.mle.ci.stdCi, a.params.unit), a.mle.valid ? `有效；最大对数似然 ${fmt(a.mle.logLikelihood)}` : "无效"],
+      ["高振同配对法", fmtUnit(a.paired.meanHat, a.params.unit), fmtCiUnit(a.paired.parametricCi.meanCi, a.params.unit), fmtUnit(a.paired.stdHat, a.params.unit), fmtCiUnit(a.paired.parametricCi.stdCi, a.params.unit), a.paired.valid ? "有效" : "未满足有效性要求"],
+      ["配对数据Bootstrap", fmtUnit(a.paired.meanHat, a.params.unit), fmtCiUnit(a.pairedBootstrap.meanCi, a.params.unit), fmtUnit(a.paired.stdHat, a.params.unit), fmtCiUnit(a.pairedBootstrap.stdCi, a.params.unit), Number.isFinite(a.pairedBootstrap.adequacyRate) ? `对子数满足率 ${fmt(a.pairedBootstrap.adequacyRate, 3)}` : "对子数不足"]
+    ],
+    dataRows: [["序号", loadLabel(a.params.unit), "结果", "图示"]].concat(a.rows.map(r => [String(r.order), fmtUnit(r.load, a.params.unit), r.response ? "失效" : "通过", r.response ? "X" : "o"])),
+    dixonFrequencyRows: [["载荷级", loadLabel(a.params.unit), "频数", "i", "i*n", "i²*n"]].concat((a.dixon.frequencyRows || []).map(row => [String(row.levelIndex + 1), fmtUnit(row.load, a.params.unit), String(row.frequency), String(row.i), String(row.iN), String(row.i2N)])),
+    gaoRows: [
+      ["指标", "结果"],
+      ["是否闭合", a.paired.closed ? "是" : "否"],
+      ["实际对子数", String(a.paired.nPairs)],
+      ["回溯配对子数", String(a.paired.retrospectivePairs)],
+      ["所需最少对子数", String(a.paired.requiredPairs ?? "-")],
+      ["变异系数", fmt(a.paired.cv, 5)],
+      ["均值参数法置信区间", fmtCiUnit(a.paired.parametricCi.meanCi, a.params.unit)],
+      ["标准差参数法置信区间", fmtCiUnit(a.paired.parametricCi.stdCi, a.params.unit)],
+      ["未配对点", a.paired.unmatchedIndices.map(i => i + 1).join(", ") || "-"],
+      ["95%置信度/5%误差限", a.paired.valid ? "满足" : "未满足"]
+    ],
+    gaoPairRows: [["对子", "点1", "点2", "对子中值"]].concat(a.paired.pairIndices.map((pair, idx) => [`P${idx + 1}`, String(pair[0] + 1), String(pair[1] + 1), fmtUnit(a.paired.pairValues[idx], a.params.unit)])),
+    gaoBootstrapRows: [
+      ["指标", "结果"],
+      ["均值置信区间", fmtCiUnit(a.pairedBootstrap.meanCi, a.params.unit)],
+      ["标准差置信区间", fmtCiUnit(a.pairedBootstrap.stdCi, a.params.unit)],
+      ["变异系数置信区间", fmtCi(a.pairedBootstrap.cvCi)],
+      ["对子数满足率", Number.isFinite(a.pairedBootstrap.adequacyRate) ? fmt(a.pairedBootstrap.adequacyRate, 3) : "-"],
+      ["有效Bootstrap样本数", String(a.pairedBootstrap.nValid ?? "-")]
+    ]
+  };
+}
+function buildPdfHtml(a) {
+  const tables = buildReportTables(a);
+  const chartData = $("chartCanvas").toDataURL("image/png");
+  const notesHtml = a.notes.length ? a.notes.map(n => `<p>校验：${escapeHtml(n)}</p>`).join("") : "<p>未发现关键校验警告。</p>";
+  const conclusionHtml = reportConclusionText(a).map(line => `<p>${escapeHtml(line)}</p>`).join("");
+  return `<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>升降法疲劳强度数据评估报告</title><style>
+    @page { size: A4; margin: 16mm; }
+    body { font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif; color: #1f2937; line-height: 1.55; }
+    h1 { font-size: 24px; margin: 0 0 12px; }
+    h2 { font-size: 18px; margin: 22px 0 10px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
+    h3 { font-size: 15px; margin: 16px 0 8px; }
+    p { margin: 6px 0; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin: 8px 0 14px; break-inside: avoid; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 7px; font-size: 11px; vertical-align: middle; }
+    th { background: #eef6fb; color: #102a43; }
+    img { width: 100%; max-width: 180mm; border: 1px solid #cbd5e1; }
+    .meta { color: #475467; }
+    .section { break-inside: avoid; }
+  </style></head><body>
+    <h1>升降法疲劳强度数据评估报告</h1>
+    <p class="meta">生成时间：${escapeHtml(a.createdAt.toLocaleString())}</p>
+    <p class="meta">单位：${escapeHtml(a.params.unit)}；步长 d：${escapeHtml(fmtUnit(a.d, a.params.unit))}；Bootstrap 次数：${a.params.bootstrap}；MLE Bootstrap 次数：${a.params.mleBootstrap}；置信水平：${fmt((1 - a.params.alpha) * 100, 1)}%；随机种子：${a.params.seed}</p>
+    <h2>1. 原始升降法结果表</h2>${htmlTable(tables.dataRows)}
+    <h2>2. 数据校核</h2>${notesHtml}
+    <h2>3. 升降过程图</h2><img src="${chartData}" alt="升降过程图">
+    <h2>4. 四种方法评估结果</h2>${htmlTable(tables.methodRows)}
+    <h3>4.1 Dixon-Mood 方法</h3><p>Dixon-Mood 使用${escapeHtml(a.dixon.group || "-")}进行频数统计。N=${a.dixon.N ?? "-"}，A=${fmt(a.dixon.A)}，B=${fmt(a.dixon.B)}。</p>${htmlTable(tables.dixonFrequencyRows)}
+    <h3>4.2 MLE 最大似然方法</h3><p>MLE 假设疲劳阈值服从正态分布，使用全部通过/失效二元响应构造似然函数。最大对数似然值为 ${fmt(a.mle.logLikelihood)}。</p>
+    <h3>4.3 高振同配对法</h3>${htmlTable(tables.gaoRows)}${htmlTable(tables.gaoPairRows)}
+    <h3>4.4 高振同配对法配对数据 Bootstrap</h3><p>Bootstrap 以完整对子中值为抽样单元，不拆分原始试验点。该结果用于补充小样本不确定性评估，不替代闭合和最少对子数要求。</p>${htmlTable(tables.gaoBootstrapRows)}
+    <h2>5. 结论与建议</h2>${conclusionHtml}
+  </body></html>`;
+}
+function reportConclusionText(a) {
+  const lines = [];
+  if (a.paired.valid) lines.push("高振同配对法满足闭合、最少对子数和正标准差要求，可作为本组数据的正式配对升降法评估结果。");
+  else lines.push("高振同配对法当前未完全满足正式有效性要求，应结合闭合状态、对子数、CV 和 Bootstrap 区间宽度判断是否需要补充试验。");
+  if (a.dixon.valid) lines.push("Dixon-Mood 方法给出了可用估计，适合作为传统升降法基准结果。");
+  if (a.mle.valid) lines.push("MLE 利用全序列二元响应，适合与 Dixon-Mood 或配对法结果交叉复核。");
+  if (!a.dixon.valid && !a.mle.valid && !a.paired.valid) lines.push("当前三种主要估计方法均未形成可靠结果，建议优先检查初始载荷、步长、响应判据和样本序列完整性。");
+  lines.push("若不同方法均值差异较大，应检查初始载荷、步长、升降路径是否异常，并结合材料批次、试验环境和失效判据进行工程判断。");
+  return lines;
+}
+function exportPdf(a) {
+  const win = window.open("", "_blank");
+  if (!win) throw new Error("浏览器拦截了 PDF 打印窗口，请允许弹出窗口后重试。");
+  win.document.open();
+  win.document.write(buildPdfHtml(a));
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
 }
 function dataUrlToBytes(dataUrl) {
   const bin = atob(dataUrl.split(",")[1]);
@@ -873,7 +974,7 @@ function setStatus(text, error = false) {
 }
 function setup() {
   $("addRowBtn").addEventListener("click", () => addRow($("dataBody").children.length + 1, "", ""));
-  $("clearRowsBtn").addEventListener("click", () => { $("dataBody").innerHTML = ""; for (let i = 1; i <= 8; i++) addRow(i); currentAnalysis = null; $("exportBtn").disabled = true; setStatus("已清空"); });
+  $("clearRowsBtn").addEventListener("click", () => { $("dataBody").innerHTML = ""; for (let i = 1; i <= 8; i++) addRow(i); currentAnalysis = null; $("exportBtn").disabled = true; $("pdfBtn").disabled = true; setStatus("已清空"); });
   $("sampleBtn").addEventListener("click", () => { loadSample(); setStatus("已载入示例数据"); });
   $("analyzeBtn").addEventListener("click", () => {
     try {
@@ -881,6 +982,7 @@ function setup() {
       currentAnalysis = analyzeData();
       renderAll(currentAnalysis);
       $("exportBtn").disabled = false;
+      $("pdfBtn").disabled = false;
       setStatus("计算完成");
     } catch (err) {
       setStatus(err.message, true);
@@ -895,6 +997,14 @@ function setup() {
       setStatus("Word 报告已生成");
     } catch (err) { setStatus(err.message, true); }
   });
+  $("pdfBtn").addEventListener("click", () => {
+    try {
+      if (!currentAnalysis) currentAnalysis = analyzeData();
+      drawChart(currentAnalysis);
+      exportPdf(currentAnalysis);
+      setStatus("PDF 打印窗口已打开，请在浏览器中选择“另存为 PDF”。");
+    } catch (err) { setStatus(err.message, true); }
+  });
   $("testBtn").addEventListener("click", () => {
     try { setStatus(runSelfTests()); } catch (err) { setStatus("自检失败：" + err.message, true); }
   });
@@ -903,6 +1013,7 @@ function setup() {
   currentAnalysis = analyzeData();
   renderAll(currentAnalysis);
   $("exportBtn").disabled = false;
+  $("pdfBtn").disabled = false;
   setStatus("示例数据已自动计算");
 }
 setup();
