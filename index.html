@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>升降法疲劳评估</title>
+<style>
+:root {
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --ink: #1f2937;
+  --muted: #667085;
+  --line: #d9e0ea;
+  --accent: #1464a5;
+  --accent-2: #0f8b8d;
+  --good: #137a3f;
+  --warn: #b45309;
+  --bad: #b42318;
+  --soft-good: #e9f7ef;
+  --soft-warn: #fff4df;
+  --soft-bad: #fdecec;
+  --shadow: 0 10px 28px rgba(16, 24, 40, 0.08);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Microsoft YaHei", "Segoe UI", Arial, sans-serif;
+  letter-spacing: 0;
+}
+header {
+  background: #102a43;
+  color: #fff;
+  padding: 22px 30px;
+  border-bottom: 5px solid var(--accent-2);
+}
+header h1 { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
+header p { margin: 0; color: #c9d6e2; font-size: 13px; }
+main {
+  width: min(1500px, calc(100vw - 32px));
+  margin: 18px auto 36px;
+  display: grid;
+  grid-template-columns: minmax(360px, 470px) minmax(0, 1fr);
+  gap: 16px;
+}
+section, .panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  border-radius: 8px;
+}
+.left, .right { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.section-head {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+h2 { margin: 0; font-size: 16px; }
+.body { padding: 14px 16px 16px; }
+.grid { display: grid; gap: 12px; }
+.params { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 700; }
+input, select {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+input[type="checkbox"] { width: 16px; min-height: 16px; }
+.checkbox-row { display: flex; align-items: center; gap: 8px; min-height: 36px; color: var(--ink); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  border: 1px solid #b8c4d3;
+  background: #fff;
+  color: var(--ink);
+  min-height: 36px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+}
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.secondary { background: #eef6fb; border-color: #bdd7e8; color: #0f4f7a; }
+button.danger { color: var(--bad); border-color: #f0b8b4; }
+button:hover { filter: brightness(0.98); }
+button:disabled { cursor: not-allowed; opacity: 0.55; }
+.table-wrap { overflow: auto; border: 1px solid var(--line); border-radius: 6px; max-height: 440px; }
+table { width: 100%; border-collapse: collapse; background: #fff; }
+th, td { border-bottom: 1px solid #e6ebf2; padding: 7px 8px; text-align: left; font-size: 13px; vertical-align: middle; }
+th { position: sticky; top: 0; background: #f8fafc; color: #475467; z-index: 1; }
+td input { min-height: 30px; padding: 4px 6px; }
+td.row-tools { width: 48px; text-align: center; }
+.mini { padding: 5px 8px; min-height: 28px; font-size: 12px; }
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+}
+.stat {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfe;
+  min-height: 82px;
+}
+.stat .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.stat .value { font-size: 21px; font-weight: 800; color: #172033; overflow-wrap: anywhere; }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  border: 1px solid var(--line);
+}
+.badge.good { background: var(--soft-good); color: var(--good); border-color: #b7e3c8; }
+.badge.warn { background: var(--soft-warn); color: var(--warn); border-color: #f2d298; }
+.badge.bad { background: var(--soft-bad); color: var(--bad); border-color: #f4b7b2; }
+.notes { display: grid; gap: 8px; }
+.note {
+  border-left: 4px solid var(--warn);
+  background: #fffaf0;
+  padding: 9px 10px;
+  font-size: 13px;
+  color: #5f3b00;
+}
+.empty { color: var(--muted); font-size: 13px; }
+.chart-box { padding: 12px; }
+canvas { width: 100%; max-width: 100%; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+.method-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.method-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fff;
+  display: grid;
+  gap: 8px;
+}
+.method-card h3 { margin: 0; font-size: 15px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.kv { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 6px 8px; font-size: 13px; }
+.kv span:nth-child(odd) { color: var(--muted); }
+.kv span:nth-child(even) { font-weight: 700; overflow-wrap: anywhere; }
+.wide { grid-column: 1 / -1; }
+.footer-row {
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (max-width: 1100px) {
+  main { grid-template-columns: 1fr; }
+  .summary-grid, .method-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  main { width: calc(100vw - 18px); }
+  .params, .summary-grid, .method-grid { grid-template-columns: 1fr; }
+  header { padding: 18px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>升降法疲劳评估</h1>
+  <p>纯前端离线工具：手工录入试验序列，计算 Dixon-Mood、MLE、高振同配对法与 Bootstrap 区间，并导出 Word 报告。</p>
+</header>
+<main>
+  <div class="left">
+    <section>
+      <div class="section-head">
+        <h2>试验数据</h2>
+        <div class="actions">
+          <button class="mini secondary" id="sampleBtn">示例</button>
+          <button class="mini" id="addRowBtn">加行</button>
+          <button class="mini danger" id="clearRowsBtn">清空</button>
+        </div>
+      </div>
+      <div class="body">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th style="width:70px;">序号</th><th>载荷/应力</th><th>结果</th><th style="width:48px;"></th></tr></thead>
+            <tbody id="dataBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+    <section>
+      <div class="section-head"><h2>分析参数</h2></div>
+      <div class="body grid params">
+        <label>步长 d（留空自动推断）<input id="stepInput" type="number" step="any" placeholder="自动"></label>
+        <label>显著性 alpha<input id="alphaInput" type="number" step="0.01" min="0.001" max="0.5" value="0.05"></label>
+        <label>Bootstrap 次数<input id="bootInput" type="number" min="50" max="20000" step="50" value="3000"></label>
+        <label>MLE Bootstrap 次数<input id="mleBootInput" type="number" min="20" max="5000" step="10" value="120"></label>
+        <label>随机种子<input id="seedInput" type="number" step="1" value="20260624"></label>
+        <label>Gao 闭合要求<span class="checkbox-row"><input id="closedInput" type="checkbox" checked> 要求闭合才判定正式有效</span></label>
+      </div>
+      <div class="footer-row">
+        <span id="statusText">等待分析</span>
+        <div class="actions">
+          <button id="testBtn">自检</button>
+          <button class="primary" id="analyzeBtn">计算评估</button>
+          <button id="exportBtn" disabled>导出 Word</button>
+        </div>
+      </div>
+    </section>
+  </div>
+  <div class="right">
+    <section>
+      <div class="section-head"><h2>结果总览</h2><span id="validBadge" class="badge warn">未计算</span></div>
+      <div class="body summary-grid" id="summaryGrid"></div>
+    </section>
+    <section>
+      <div class="section-head"><h2>升降过程图</h2></div>
+      <div class="chart-box"><canvas id="chartCanvas" width="980" height="430"></canvas></div>
+    </section>
+    <section>
+      <div class="section-head"><h2>方法结果</h2></div>
+      <div class="body method-grid" id="methodsGrid"></div>
+    </section>
+    <section>
+      <div class="section-head"><h2>校验说明</h2></div>
+      <div class="body notes" id="notesBox"><div class="empty">计算后显示数据校验与工程解释。</div></div>
+    </section>
+  </div>
+</main>
+
+<script>
+"use strict";
+
+const GAO_PAIRED_CV_TABLE = [
+  [0.0000, 0.0201, 3], [0.0201, 0.0314, 4], [0.0314, 0.0403, 5],
+  [0.0403, 0.0476, 6], [0.0476, 0.0541, 7], [0.0541, 0.0598, 8],
+  [0.0598, 0.0650, 9], [0.0650, 0.0699, 10], [0.0699, 0.0744, 11],
+  [0.0744, 0.0787, 12], [0.0787, 0.0827, 13], [0.0827, 0.0866, 14],
+  [0.0866, 0.0903, 15]
+];
+const PASS_VALUES = new Set(["o", "O", "通过", "合格", "未失效", "pass", "passed", "survival", "survive", "runout", "0"]);
+const FAIL_VALUES = new Set(["x", "X", "×", "失效", "失败", "断裂", "fail", "failed", "failure", "broken", "1"]);
+let currentAnalysis = null;
+
+function $(id) { return document.getElementById(id); }
+function fmt(value, digits = 3) {
+  return Number.isFinite(value) ? Number(value).toFixed(digits).replace(/\.?0+$/, "") : "-";
+}
+function fmtCi(ci) { return ci && Number.isFinite(ci[0]) && Number.isFinite(ci[1]) ? `[${fmt(ci[0])}, ${fmt(ci[1])}]` : "-"; }
+function mean(arr) { return arr.reduce((a, b) => a + b, 0) / arr.length; }
+function sampleStd(arr) {
+  if (arr.length < 2) return NaN;
+  const m = mean(arr);
+  return Math.sqrt(arr.reduce((s, x) => s + (x - m) ** 2, 0) / (arr.length - 1));
+}
+function percentile(values, p) {
+  const arr = values.filter(Number.isFinite).sort((a, b) => a - b);
+  if (arr.length < 10) return NaN;
+  const pos = (arr.length - 1) * p;
+  const lo = Math.floor(pos), hi = Math.ceil(pos);
+  if (lo === hi) return arr[lo];
+  return arr[lo] * (hi - pos) + arr[hi] * (pos - lo);
+}
+function percentileCi(values, alpha) { return [percentile(values, alpha / 2), percentile(values, 1 - alpha / 2)]; }
+function almostEqual(a, b, eps = 1e-9) { return Math.abs(a - b) <= eps * Math.max(1, Math.abs(a), Math.abs(b)); }
+
+function erf(x) {
+  const sign = x < 0 ? -1 : 1;
+  x = Math.abs(x);
+  const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741, a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+  const t = 1 / (1 + p * x);
+  const y = 1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+  return sign * y;
+}
+function normCdf(x) { return 0.5 * (1 + erf(x / Math.SQRT2)); }
+function normalPpf(p) {
+  if (p <= 0 || p >= 1) return NaN;
+  const a = [-39.6968302866538, 220.946098424521, -275.928510446969, 138.357751867269, -30.6647980661472, 2.50662827745924];
+  const b = [-54.4760987982241, 161.585836858041, -155.698979859887, 66.8013118877197, -13.2806815528857];
+  const c = [-0.00778489400243029, -0.322396458041136, -2.40075827716184, -2.54973253934373, 4.37466414146497, 2.93816398269878];
+  const d = [0.00778469570904146, 0.32246712907004, 2.445134137143, 3.75440866190742];
+  const plow = 0.02425, phigh = 1 - plow;
+  let q, r;
+  if (p < plow) {
+    q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  if (p > phigh) {
+    q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+      ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+  }
+  q = p - 0.5; r = q * q;
+  return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+    (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+function tPpfApprox(p, df) {
+  const z = normalPpf(p);
+  if (!Number.isFinite(z) || df <= 0) return NaN;
+  return z + (z ** 3 + z) / (4 * df) + (5 * z ** 5 + 16 * z ** 3 + 3 * z) / (96 * df ** 2);
+}
+function chi2PpfApprox(p, df) {
+  const z = normalPpf(p);
+  if (!Number.isFinite(z) || df <= 0) return NaN;
+  return df * (1 - 2 / (9 * df) + z * Math.sqrt(2 / (9 * df))) ** 3;
+}
+function createRng(seed) {
+  let state = (Number(seed) >>> 0) || 1;
+  return function rng() {
+    state = (1664525 * state + 1013904223) >>> 0;
+    return state / 4294967296;
+  };
+}
+
+function normalizeResponse(value) {
+  const raw = String(value ?? "").trim();
+  if (PASS_VALUES.has(raw)) return false;
+  if (FAIL_VALUES.has(raw)) return true;
+  const lower = raw.toLowerCase();
+  if (PASS_VALUES.has(lower)) return false;
+  if (FAIL_VALUES.has(lower)) return true;
+  throw new Error(`无法识别结果: ${raw || "(空)"}`);
+}
+function gaoRequiredPairsFromCv(cv) {
+  if (!Number.isFinite(cv) || cv < 0) return null;
+  for (const [, high, nPairs] of GAO_PAIRED_CV_TABLE) if (cv < high) return nPairs;
+  return null;
+}
+function inferStep(loads) {
+  const diffs = [];
+  for (let i = 1; i < loads.length; i++) {
+    const diff = Math.abs(loads[i] - loads[i - 1]);
+    if (diff > 1e-12) diffs.push(diff);
+  }
+  if (!diffs.length) throw new Error("无法自动推断步长：相邻载荷没有非零变化。");
+  const counts = new Map();
+  for (const d of diffs) {
+    const key = String(Math.round(d * 1e9) / 1e9);
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  let bestKey = null, bestCount = -1;
+  for (const [key, count] of counts.entries()) {
+    if (count > bestCount || (count === bestCount && Number(key) < Number(bestKey))) {
+      bestKey = key; bestCount = count;
+    }
+  }
+  return Number(bestKey);
+}
+function validateSequence(loads, responses, d) {
+  const notes = [];
+  if (loads.length < 2) notes.push("有效数据少于 2 行，无法形成升降序列。");
+  const nFail = responses.filter(Boolean).length;
+  if (nFail === 0) notes.push("全部结果均为通过，Dixon-Mood、MLE 和 Gao 配对估计通常无效。");
+  if (nFail === responses.length) notes.push("全部结果均为失效，Dixon-Mood、MLE 和 Gao 配对估计通常无效。");
+  for (let i = 1; i < loads.length; i++) {
+    const diff = Math.abs(loads[i] - loads[i - 1]);
+    if (diff > 1e-12) {
+      const ratio = diff / d;
+      if (!almostEqual(ratio, Math.round(ratio), 1e-6)) {
+        notes.push(`第 ${i} 到 ${i + 1} 点载荷差 ${fmt(diff)} 不是步长 ${fmt(d)} 的整数倍。`);
+      }
+    }
+  }
+  for (let i = 0; i < responses.length - 1; i++) {
+    const expected = responses[i] ? loads[i] - d : loads[i] + d;
+    if (!almostEqual(loads[i + 1], expected, 1e-6)) {
+      notes.push(`第 ${i + 1} 点后续载荷不符合标准升降路径：期望约 ${fmt(expected)}，实际 ${fmt(loads[i + 1])}。`);
+    }
+  }
+  return notes;
+}
+
+function dixonMoodEstimate(loads, responses, d) {
+  const nFail = responses.filter(Boolean).length;
+  const nPass = loads.length - nFail;
+  const useFail = nFail <= nPass;
+  const k = useFail ? nFail : nPass;
+  if (k === 0) return { meanHat: NaN, stdHat: NaN, valid: false, group: "none", frequencyRows: [] };
+  const events = loads.filter((_, i) => responses[i] === useFail);
+  const uniqueLoads = Array.from(new Set(loads)).sort((a, b) => a - b);
+  const loadToIdx = new Map(uniqueLoads.map((v, i) => [String(v), i]));
+  const indices = events.map(v => loadToIdx.get(String(v)));
+  const base = Math.min(...indices);
+  const shifted = indices.map(i => i - base);
+  const n = k;
+  const A = shifted.reduce((s, x) => s + x, 0);
+  const B = shifted.reduce((s, x) => s + x * x, 0);
+  const sign = useFail ? -0.5 : 0.5;
+  const meanHat = Math.min(...events) + d * (A / n + sign);
+  const numerator = Math.max(n * B - A * A, 0);
+  let stdHat = n > 0 ? d * Math.sqrt(numerator) / n : NaN;
+  const correction = {2: 0.500, 3: 0.748, 4: 0.862, 5: 0.916, 6: 0.947, 7: 0.967, 8: 0.979, 9: 0.987, 10: 0.991, 11: 0.994, 12: 0.996, 13: 0.997, 14: 0.998, 15: 0.998};
+  if (correction[n]) stdHat /= correction[n];
+  const counts = new Map();
+  indices.forEach(idx => counts.set(idx, (counts.get(idx) || 0) + 1));
+  const frequencyRows = Array.from(counts.entries()).sort((a, b) => a[0] - b[0]).map(([idx, frequency]) => ({
+    levelIndex: idx, load: uniqueLoads[idx], frequency, i: idx - base,
+    iN: (idx - base) * frequency, i2N: (idx - base) ** 2 * frequency
+  }));
+  return { meanHat, stdHat, valid: Number.isFinite(stdHat) && stdHat > 0, group: useFail ? "失效组" : "通过组", N: n, A, B, frequencyRows };
+}
+function logLikelihood(mu, sigma, loads, responses) {
+  if (sigma <= 0) return -1e100;
+  let ll = 0;
+  for (let i = 0; i < loads.length; i++) {
+    const p = Math.min(1 - 1e-15, Math.max(1e-15, normCdf((loads[i] - mu) / sigma)));
+    ll += responses[i] ? Math.log(p) : Math.log(1 - p);
+  }
+  return ll;
+}
+function mleEstimate(loads, responses, d, gridSize = 100) {
+  const dm = dixonMoodEstimate(loads, responses, d);
+  if (!dm.valid) return { meanHat: NaN, stdHat: NaN, valid: false, logLikelihood: NaN };
+  const muCenter = dm.meanHat;
+  let sigmaCenter = dm.stdHat > 0 ? dm.stdHat : d;
+  if (sigmaCenter <= 0 || sigmaCenter > 10 * d) sigmaCenter = d * 1.5;
+  const muRange = Math.max(3 * sigmaCenter, 2 * d);
+  const sigmaMin = Math.max(0.05 * d, 0.1 * sigmaCenter);
+  const sigmaMax = Math.max(sigmaCenter + Math.max(0.8 * sigmaCenter, 0.5 * d), 2 * d);
+  let best = [muCenter, sigmaCenter, -1e100];
+  const scan = (muLo, muHi, muN, sigmaLo, sigmaHi, sigmaN) => {
+    for (let mi = 0; mi < muN; mi++) {
+      const mu = muLo + (muHi - muLo) * mi / Math.max(1, muN - 1);
+      for (let si = 0; si < sigmaN; si++) {
+        const sigma = sigmaLo + (sigmaHi - sigmaLo) * si / Math.max(1, sigmaN - 1);
+        const ll = logLikelihood(mu, sigma, loads, responses);
+        if (ll > best[2]) best = [mu, sigma, ll];
+      }
+    }
+  };
+  scan(muCenter - muRange, muCenter + muRange, gridSize, sigmaMin, sigmaMax, Math.max(50, Math.floor(gridSize / 2)));
+  for (const [spanMu, spanSigma] of [[d, d], [0.25 * d, 0.25 * d]]) {
+    scan(best[0] - spanMu, best[0] + spanMu, 41, Math.max(sigmaMin * 0.5, best[1] - spanSigma), best[1] + spanSigma, 41);
+  }
+  return { meanHat: best[0], stdHat: best[1], valid: best[1] > 0, logLikelihood: best[2] };
+}
+function pairedUpdownEstimate(loads, responses, d, requireClosed = true) {
+  const base = { meanHat: NaN, stdHat: NaN, valid: false, closed: false, startIndex: null, nPairs: 0, pairValues: [], pairIndices: [], cv: NaN, requiredPairs: null, unmatchedIndices: [], retrospectivePairs: 0 };
+  if (loads.length < 2) return base;
+  let startIndex = null;
+  for (let i = 0; i < loads.length - 1; i++) {
+    if (responses[i] !== responses[i + 1] && almostEqual(Math.abs(loads[i + 1] - loads[i]), d)) { startIndex = i; break; }
+  }
+  if (startIndex === null) return base;
+  const last = loads.length - 1;
+  const nextLoad = responses[last] ? loads[last] - d : loads[last] + d;
+  const closed = almostEqual(nextLoad, loads[startIndex]);
+  const pairValues = [], pairIndices = [], unmatched = [];
+  let retrospectivePairs = 0;
+  for (let cur = 0; cur < loads.length; cur++) {
+    let matchPos = null;
+    for (let pos = unmatched.length - 1; pos >= 0; pos--) {
+      const prev = unmatched[pos];
+      if (responses[prev] !== responses[cur] && almostEqual(Math.abs(loads[cur] - loads[prev]), d)) { matchPos = pos; break; }
+    }
+    if (matchPos === null) { unmatched.push(cur); continue; }
+    const prev = unmatched.splice(matchPos, 1)[0];
+    pairIndices.push([prev, cur]);
+    pairValues.push((loads[prev] + loads[cur]) / 2);
+    if (cur - prev > 1) retrospectivePairs++;
+  }
+  const nPairs = pairValues.length;
+  const meanHat = nPairs ? mean(pairValues) : NaN;
+  const stdHat = nPairs >= 2 ? sampleStd(pairValues) : NaN;
+  const cv = nPairs >= 2 && meanHat !== 0 && Number.isFinite(stdHat) ? stdHat / Math.abs(meanHat) : NaN;
+  const requiredPairs = gaoRequiredPairsFromCv(cv);
+  const validStd = Number.isFinite(stdHat) && stdHat > 0;
+  const enough = requiredPairs !== null && nPairs >= requiredPairs;
+  const valid = Boolean(validStd && enough && (closed || !requireClosed));
+  return { meanHat, stdHat, valid, closed, startIndex, nPairs, pairValues, pairIndices, cv, requiredPairs, unmatchedIndices: unmatched, retrospectivePairs };
+}
+function pairedParametricCi(pairValues, alpha) {
+  const n = pairValues.length;
+  if (n < 2) return { meanCi: [NaN, NaN], stdCi: [NaN, NaN] };
+  const m = mean(pairValues), s = sampleStd(pairValues), df = n - 1;
+  const t = tPpfApprox(1 - alpha / 2, df);
+  const meanCi = [m - t * s / Math.sqrt(n), m + t * s / Math.sqrt(n)];
+  const lo = chi2PpfApprox(alpha / 2, df), hi = chi2PpfApprox(1 - alpha / 2, df);
+  const stdCi = lo > 0 && hi > 0 ? [Math.sqrt(df * s * s / hi), Math.sqrt(df * s * s / lo)] : [NaN, NaN];
+  return { meanCi, stdCi };
+}
+function rowBootstrapCi(loads, responses, d, methodName, nBootstrap, alpha, seed) {
+  const rng = createRng(seed);
+  const means = [], stds = [];
+  for (let b = 0; b < nBootstrap; b++) {
+    const bl = [], br = [];
+    for (let i = 0; i < loads.length; i++) {
+      const idx = Math.floor(rng() * loads.length);
+      bl.push(loads[idx]); br.push(responses[idx]);
+    }
+    const est = methodName === "mle" ? mleEstimate(bl, br, d, 45) : dixonMoodEstimate(bl, br, d);
+    if (est.valid) { means.push(est.meanHat); stds.push(est.stdHat); }
+  }
+  return { meanCi: percentileCi(means, alpha), stdCi: percentileCi(stds, alpha), nValid: means.length };
+}
+function pairedMidpointBootstrap(pairValues, nBootstrap, alpha, seed) {
+  if (pairValues.length < 2) return { meanCi: [NaN, NaN], stdCi: [NaN, NaN], cvCi: [NaN, NaN], requiredPairsCi: [NaN, NaN], adequacyRate: NaN, nValid: 0 };
+  const rng = createRng(seed);
+  const means = [], stds = [], cvs = [], reqs = [];
+  let adequate = 0;
+  for (let b = 0; b < nBootstrap; b++) {
+    const sample = [];
+    for (let i = 0; i < pairValues.length; i++) sample.push(pairValues[Math.floor(rng() * pairValues.length)]);
+    const m = mean(sample), s = sampleStd(sample);
+    if (!Number.isFinite(s)) continue;
+    const cv = m !== 0 ? s / Math.abs(m) : NaN;
+    const req = gaoRequiredPairsFromCv(cv);
+    means.push(m); stds.push(s); cvs.push(cv);
+    if (req !== null) {
+      reqs.push(req);
+      if (pairValues.length >= req) adequate++;
+    }
+  }
+  return { meanCi: percentileCi(means, alpha), stdCi: percentileCi(stds, alpha), cvCi: percentileCi(cvs, alpha), requiredPairsCi: percentileCi(reqs, alpha), adequacyRate: reqs.length ? adequate / reqs.length : NaN, nValid: means.length };
+}
+
+function parseRows() {
+  const rows = Array.from($("dataBody").querySelectorAll("tr")).map((tr, idx) => {
+    const inputs = tr.querySelectorAll("input");
+    return { order: inputs[0].value.trim() ? Number(inputs[0].value) : idx + 1, loadRaw: inputs[1].value.trim(), resultRaw: inputs[2].value.trim() };
+  }).filter(r => r.loadRaw !== "" || r.resultRaw !== "");
+  if (!rows.length) throw new Error("请至少输入一行有效试验数据。");
+  return rows.map((r, idx) => {
+    const load = Number(r.loadRaw);
+    if (!Number.isFinite(load)) throw new Error(`第 ${idx + 1} 行载荷不是有效数字。`);
+    return { order: Number.isFinite(r.order) ? r.order : idx + 1, load, result: r.resultRaw, response: normalizeResponse(r.resultRaw) };
+  });
+}
+function getParams() {
+  const alpha = Number($("alphaInput").value);
+  const bootstrap = Number($("bootInput").value);
+  const mleBootstrap = Number($("mleBootInput").value);
+  const seed = Number($("seedInput").value);
+  const stepRaw = $("stepInput").value.trim();
+  if (!(alpha > 0 && alpha < 0.5)) throw new Error("alpha 必须在 0 到 0.5 之间。");
+  if (!(bootstrap >= 10) || !(mleBootstrap >= 10)) throw new Error("Bootstrap 次数过小。");
+  return { step: stepRaw ? Number(stepRaw) : null, alpha, bootstrap: Math.floor(bootstrap), mleBootstrap: Math.floor(mleBootstrap), seed, requireClosed: $("closedInput").checked };
+}
+function analyzeData() {
+  const rows = parseRows();
+  const params = getParams();
+  const loads = rows.map(r => r.load);
+  const responses = rows.map(r => r.response);
+  const d = params.step || inferStep(loads);
+  if (!(d > 0)) throw new Error("步长必须为正数。");
+  const notes = validateSequence(loads, responses, d);
+  const dixon = dixonMoodEstimate(loads, responses, d);
+  const mle = mleEstimate(loads, responses, d);
+  const paired = pairedUpdownEstimate(loads, responses, d, params.requireClosed);
+  paired.parametricCi = pairedParametricCi(paired.pairValues, params.alpha);
+  dixon.ci = rowBootstrapCi(loads, responses, d, "dixon", params.bootstrap, params.alpha, params.seed);
+  mle.ci = rowBootstrapCi(loads, responses, d, "mle", params.mleBootstrap, params.alpha, params.seed + 11);
+  const pairedBootstrap = pairedMidpointBootstrap(paired.pairValues, params.bootstrap, params.alpha, params.seed + 23);
+  if (!dixon.valid) notes.push("Dixon-Mood 标准差估计无效，通常由单一响应组或频数分布退化导致。");
+  if (!mle.valid) notes.push("MLE 无效，未能得到正的标准差估计。");
+  if (!paired.closed) notes.push("Gao 配对升降过程未闭合；若启用闭合要求，配对法不判定为正式有效。");
+  if (paired.requiredPairs === null) notes.push("Gao 配对法 CV 超出表格范围或不可计算，无法查取所需对子数。");
+  else if (paired.nPairs < paired.requiredPairs) notes.push(`Gao 配对法对子数不足：实际 ${paired.nPairs}，所需 ${paired.requiredPairs}。`);
+  if (!(Number.isFinite(paired.stdHat) && paired.stdHat > 0)) notes.push("Gao 配对法标准差不可用或为 0。");
+  return { rows, loads, responses, d, params, notes, dixon, mle, paired, pairedBootstrap, createdAt: new Date() };
+}
+
+function addRow(order = "", load = "", result = "") {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td><input value="${escapeHtml(order)}" inputmode="numeric"></td><td><input value="${escapeHtml(load)}" inputmode="decimal"></td><td><input value="${escapeHtml(result)}" placeholder="o / X"></td><td class="row-tools"><button class="mini danger" title="删除">删</button></td>`;
+  tr.querySelector("button").addEventListener("click", () => tr.remove());
+  $("dataBody").appendChild(tr);
+}
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+function loadSample() {
+  $("dataBody").innerHTML = "";
+  [
+    [1, 110, "X"], [2, 105, "X"], [3, 100, "o"], [4, 105, "o"], [5, 110, "X"],
+    [6, 105, "X"], [7, 100, "o"], [8, 105, "X"], [9, 100, "o"], [10, 105, "o"],
+    [11, 110, "X"], [12, 105, "o"], [13, 110, "X"], [14, 105, "X"], [15, 100, "o"]
+  ].forEach(r => addRow(...r));
+}
+function renderAll(analysis) {
+  renderSummary(analysis);
+  renderMethods(analysis);
+  renderNotes(analysis.notes);
+  drawChart(analysis);
+}
+function renderSummary(a) {
+  const pairedStatus = a.paired.valid ? "正式有效" : "未满足";
+  $("validBadge").className = `badge ${a.paired.valid ? "good" : "bad"}`;
+  $("validBadge").textContent = `Gao ${pairedStatus}`;
+  const stats = [
+    ["有效点数", a.rows.length],
+    ["推断/指定步长", fmt(a.d)],
+    ["失效/通过", `${a.responses.filter(Boolean).length}/${a.responses.filter(x => !x).length}`],
+    ["Gao 对子数", `${a.paired.nPairs}/${a.paired.requiredPairs ?? "-"}`]
+  ];
+  $("summaryGrid").innerHTML = stats.map(([label, value]) => `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div></div>`).join("");
+}
+function badge(valid) { return `<span class="badge ${valid ? "good" : "bad"}">${valid ? "有效" : "无效"}</span>`; }
+function renderMethods(a) {
+  $("methodsGrid").innerHTML = `
+    <div class="method-card">
+      <h3>Dixon-Mood ${badge(a.dixon.valid)}</h3>
+      <div class="kv">
+        <span>均值</span><span>${fmt(a.dixon.meanHat)}</span>
+        <span>标准差</span><span>${fmt(a.dixon.stdHat)}</span>
+        <span>统计组</span><span>${a.dixon.group || "-"}</span>
+        <span>均值区间</span><span>${fmtCi(a.dixon.ci.meanCi)}</span>
+        <span>标准差区间</span><span>${fmtCi(a.dixon.ci.stdCi)}</span>
+        <span>Bootstrap有效</span><span>${a.dixon.ci.nValid}</span>
+      </div>
+    </div>
+    <div class="method-card">
+      <h3>MLE ${badge(a.mle.valid)}</h3>
+      <div class="kv">
+        <span>均值</span><span>${fmt(a.mle.meanHat)}</span>
+        <span>标准差</span><span>${fmt(a.mle.stdHat)}</span>
+        <span>对数似然</span><span>${fmt(a.mle.logLikelihood)}</span>
+        <span>均值区间</span><span>${fmtCi(a.mle.ci.meanCi)}</span>
+        <span>标准差区间</span><span>${fmtCi(a.mle.ci.stdCi)}</span>
+        <span>Bootstrap有效</span><span>${a.mle.ci.nValid}</span>
+      </div>
+    </div>
+    <div class="method-card">
+      <h3>Gao 配对 ${badge(a.paired.valid)}</h3>
+      <div class="kv">
+        <span>均值</span><span>${fmt(a.paired.meanHat)}</span>
+        <span>标准差</span><span>${fmt(a.paired.stdHat)}</span>
+        <span>CV</span><span>${fmt(a.paired.cv, 5)}</span>
+        <span>闭合</span><span>${a.paired.closed ? "是" : "否"}</span>
+        <span>对子数</span><span>${a.paired.nPairs}</span>
+        <span>所需对子数</span><span>${a.paired.requiredPairs ?? "-"}</span>
+        <span>回溯配对</span><span>${a.paired.retrospectivePairs}</span>
+        <span>未配对点</span><span>${a.paired.unmatchedIndices.map(i => i + 1).join(", ") || "-"}</span>
+      </div>
+    </div>
+    <div class="method-card wide">
+      <h3>Gao 配对 Bootstrap 与参数区间</h3>
+      <div class="kv">
+        <span>配对均值区间</span><span>${fmtCi(a.paired.parametricCi.meanCi)}（参数 t 区间）</span>
+        <span>配对标准差区间</span><span>${fmtCi(a.paired.parametricCi.stdCi)}（卡方近似）</span>
+        <span>Bootstrap均值</span><span>${fmtCi(a.pairedBootstrap.meanCi)}</span>
+        <span>Bootstrap标准差</span><span>${fmtCi(a.pairedBootstrap.stdCi)}</span>
+        <span>Bootstrap CV</span><span>${fmtCi(a.pairedBootstrap.cvCi)}</span>
+        <span>充足率</span><span>${Number.isFinite(a.pairedBootstrap.adequacyRate) ? fmt(100 * a.pairedBootstrap.adequacyRate, 1) + "%" : "-"}</span>
+      </div>
+    </div>`;
+}
+function renderNotes(notes) {
+  $("notesBox").innerHTML = notes.length ? notes.map(n => `<div class="note">${escapeHtml(n)}</div>`).join("") : `<div class="note" style="border-left-color: var(--good); background: var(--soft-good); color: var(--good);">未发现关键校验警告。</div>`;
+}
+function drawChart(a) {
+  const canvas = $("chartCanvas"), ctx = canvas.getContext("2d");
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+  const pad = { l: 70, r: 24, t: 28, b: 54 };
+  const loads = a.loads;
+  const minY = Math.min(...loads) - a.d * 0.8, maxY = Math.max(...loads) + a.d * 0.8;
+  const xScale = i => pad.l + (w - pad.l - pad.r) * (loads.length === 1 ? 0.5 : i / (loads.length - 1));
+  const yScale = y => h - pad.b - (h - pad.t - pad.b) * ((y - minY) / Math.max(1e-9, maxY - minY));
+  ctx.strokeStyle = "#d9e0ea"; ctx.lineWidth = 1;
+  ctx.font = "12px Microsoft YaHei, Arial"; ctx.fillStyle = "#667085";
+  const ticks = 5;
+  for (let t = 0; t <= ticks; t++) {
+    const yVal = minY + (maxY - minY) * t / ticks, y = yScale(yVal);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
+    ctx.fillText(fmt(yVal), 10, y + 4);
+  }
+  ctx.strokeStyle = "#96a5b8"; ctx.beginPath(); ctx.moveTo(pad.l, pad.t); ctx.lineTo(pad.l, h - pad.b); ctx.lineTo(w - pad.r, h - pad.b); ctx.stroke();
+  ctx.strokeStyle = "#1464a5"; ctx.lineWidth = 2; ctx.beginPath();
+  loads.forEach((load, i) => { const x = xScale(i), y = yScale(load); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
+  ctx.stroke();
+  const pairSet = new Set(a.paired.pairIndices.flat());
+  loads.forEach((load, i) => {
+    const x = xScale(i), y = yScale(load), fail = a.responses[i];
+    ctx.fillStyle = fail ? "#b42318" : "#137a3f";
+    ctx.strokeStyle = pairSet.has(i) ? "#0f8b8d" : "#ffffff";
+    ctx.lineWidth = pairSet.has(i) ? 4 : 2;
+    ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(fail ? "X" : "o", x, y + 0.5);
+    ctx.fillStyle = "#667085"; ctx.font = "11px Arial"; ctx.fillText(String(i + 1), x, h - 32);
+  });
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic"; ctx.fillStyle = "#1f2937"; ctx.font = "bold 14px Microsoft YaHei, Arial";
+  ctx.fillText("o = 通过 / X = 失效；青色描边 = Gao 已配对点", pad.l, 18);
+  ctx.fillStyle = "#667085"; ctx.font = "12px Microsoft YaHei, Arial"; ctx.fillText("试验序号", w / 2 - 20, h - 12);
+  ctx.save(); ctx.translate(18, h / 2 + 40); ctx.rotate(-Math.PI / 2); ctx.fillText("载荷/应力", 0, 0); ctx.restore();
+}
+
+function xmlEscape(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[ch]));
+}
+function textRun(text, bold = false) {
+  return `<w:r>${bold ? "<w:rPr><w:b/></w:rPr>" : ""}<w:t xml:space="preserve">${xmlEscape(text)}</w:t></w:r>`;
+}
+function para(text, style = "") { return `<w:p>${style ? `<w:pPr>${style}</w:pPr>` : ""}${textRun(text)}</w:p>`; }
+function heading(text, level = 1) { return para(text, `<w:pStyle w:val="Heading${level}"/>`); }
+function tableXml(rows) {
+  return `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="B8C4D3"/><w:left w:val="single" w:sz="4" w:color="B8C4D3"/><w:bottom w:val="single" w:sz="4" w:color="B8C4D3"/><w:right w:val="single" w:sz="4" w:color="B8C4D3"/><w:insideH w:val="single" w:sz="4" w:color="D9E0EA"/><w:insideV w:val="single" w:sz="4" w:color="D9E0EA"/></w:tblBorders></w:tblPr>${rows.map(row => `<w:tr>${row.map(cell => `<w:tc><w:tcPr><w:tcW w:w="2400" w:type="dxa"/></w:tcPr>${para(cell)}</w:tc>`).join("")}</w:tr>`).join("")}</w:tbl>`;
+}
+function reportConclusion(a) {
+  const lines = [];
+  if (a.paired.valid) {
+    lines.push("高振同配对法满足闭合、最少对子数和正标准差要求，可作为本组数据的正式配对升降法评估结果。");
+  } else {
+    lines.push("高振同配对法当前未完全满足正式有效性要求，应结合闭合状态、对子数、CV 和 Bootstrap 区间宽度判断是否需要补充试验。");
+  }
+  if (a.dixon.valid) lines.push("Dixon-Mood 方法给出了可用估计，适合作为传统升降法基准结果。");
+  if (a.mle.valid) lines.push("MLE 利用全序列二元响应，适合与 Dixon-Mood 或配对法结果交叉复核。");
+  if (!a.dixon.valid && !a.mle.valid && !a.paired.valid) lines.push("当前三种主要估计方法均未形成可靠结果，建议优先检查初始载荷、步长、响应判据和样本序列完整性。");
+  lines.push("若不同方法均值差异较大，应检查初始载荷、步长、升降路径是否异常，并结合材料批次、试验环境和失效判据进行工程判断。");
+  return lines.map(text => para(text)).join("");
+}
+function imageXml() {
+  return `<w:p><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="5486400" cy="2407680"/><wp:docPr id="1" name="updown_chart"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="updown_chart.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="5486400" cy="2407680"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
+}
+function buildDocumentXml(a) {
+  const methodRows = [
+    ["方法", "均值", "均值置信区间", "标准差", "标准差置信区间", "有效性/说明"],
+    ["Dixon-Mood", fmt(a.dixon.meanHat), fmtCi(a.dixon.ci.meanCi), fmt(a.dixon.stdHat), fmtCi(a.dixon.ci.stdCi), a.dixon.valid ? "有效" : "无效"],
+    ["MLE", fmt(a.mle.meanHat), fmtCi(a.mle.ci.meanCi), fmt(a.mle.stdHat), fmtCi(a.mle.ci.stdCi), a.mle.valid ? `有效；最大对数似然 ${fmt(a.mle.logLikelihood)}` : "无效"],
+    ["高振同配对法", fmt(a.paired.meanHat), fmtCi(a.paired.parametricCi.meanCi), fmt(a.paired.stdHat), fmtCi(a.paired.parametricCi.stdCi), a.paired.valid ? "有效" : "未满足有效性要求"],
+    ["配对数据Bootstrap", fmt(a.paired.meanHat), fmtCi(a.pairedBootstrap.meanCi), fmt(a.paired.stdHat), fmtCi(a.pairedBootstrap.stdCi), Number.isFinite(a.pairedBootstrap.adequacyRate) ? `对子数满足率 ${fmt(a.pairedBootstrap.adequacyRate, 3)}` : "对子数不足"]
+  ];
+  const dataRows = [["序号", "载荷/应力", "结果", "图示"]].concat(a.rows.map(r => [String(r.order), fmt(r.load), r.response ? "失效" : "通过", r.response ? "X" : "o"]));
+  const dixonFrequencyRows = [["载荷级", "载荷", "频数", "i", "i*n", "i²*n"]].concat(
+    (a.dixon.frequencyRows || []).map(row => [String(row.levelIndex + 1), fmt(row.load), String(row.frequency), String(row.i), String(row.iN), String(row.i2N)])
+  );
+  const gaoRows = [
+    ["指标", "结果"],
+    ["是否闭合", a.paired.closed ? "是" : "否"],
+    ["实际对子数", String(a.paired.nPairs)],
+    ["回溯配对子数", String(a.paired.retrospectivePairs)],
+    ["所需最少对子数", String(a.paired.requiredPairs ?? "-")],
+    ["变异系数", fmt(a.paired.cv, 5)],
+    ["均值参数法置信区间", fmtCi(a.paired.parametricCi.meanCi)],
+    ["标准差参数法置信区间", fmtCi(a.paired.parametricCi.stdCi)],
+    ["未配对点", a.paired.unmatchedIndices.map(i => i + 1).join(", ") || "-"],
+    ["95%置信度/5%误差限", a.paired.valid ? "满足" : "未满足"]
+  ];
+  const gaoPairRows = [["对子", "点1", "点2", "对子中值"]].concat(
+    a.paired.pairIndices.map((pair, idx) => [`P${idx + 1}`, String(pair[0] + 1), String(pair[1] + 1), fmt(a.paired.pairValues[idx])])
+  );
+  const gaoBootstrapRows = [
+    ["指标", "结果"],
+    ["均值置信区间", fmtCi(a.pairedBootstrap.meanCi)],
+    ["标准差置信区间", fmtCi(a.pairedBootstrap.stdCi)],
+    ["变异系数置信区间", fmtCi(a.pairedBootstrap.cvCi)],
+    ["对子数满足率", Number.isFinite(a.pairedBootstrap.adequacyRate) ? fmt(a.pairedBootstrap.adequacyRate, 3) : "-"],
+    ["有效Bootstrap样本数", String(a.pairedBootstrap.nValid ?? "-")]
+  ];
+  const notes = a.notes.length ? a.notes.map(n => para("校验：" + n)).join("") : para("未发现关键校验警告。");
+  const body = [
+    heading("升降法疲劳强度数据评估报告", 1),
+    para(`生成时间：${a.createdAt.toLocaleString()}`),
+    para(`步长 d：${fmt(a.d)}；Bootstrap 次数：${a.params.bootstrap}；MLE Bootstrap 次数：${a.params.mleBootstrap}；置信水平：${fmt((1 - a.params.alpha) * 100, 1)}%；随机种子：${a.params.seed}`),
+    heading("1. 原始升降法结果表", 1), tableXml(dataRows),
+    heading("2. 数据校核", 1), notes,
+    heading("3. 升降过程图", 1), imageXml(),
+    heading("4. 四种方法评估结果", 1), tableXml(methodRows),
+    heading("4.1 Dixon-Mood 方法", 2),
+    para(`Dixon-Mood 使用${a.dixon.group || "-"}进行频数统计。N=${a.dixon.N ?? "-"}，A=${fmt(a.dixon.A)}，B=${fmt(a.dixon.B)}。`),
+    tableXml(dixonFrequencyRows),
+    heading("4.2 MLE 最大似然方法", 2),
+    para(`MLE 假设疲劳阈值服从正态分布，失效概率为 Phi((s - mu) / sigma)，使用全部通过/失效二元响应构造似然函数。最大对数似然值为 ${fmt(a.mle.logLikelihood)}。`),
+    heading("4.3 高振同配对法", 2),
+    tableXml(gaoRows),
+    tableXml(gaoPairRows),
+    heading("4.4 高振同配对法配对数据 Bootstrap", 2),
+    para("Bootstrap 以完整对子中值为抽样单元，不拆分原始试验点。该结果用于补充小样本不确定性评估，不替代闭合和最少对子数要求。"),
+    tableXml(gaoBootstrapRows),
+    heading("5. 结论与建议", 1),
+    reportConclusion(a)
+  ].join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1200" w:bottom="1440" w:left="1200"/></w:sectPr></w:body></w:document>`;
+}
+function buildDocxBlob(a) {
+  const pngBytes = dataUrlToBytes($("chartCanvas").toDataURL("image/png"));
+  const files = {
+    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`,
+    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`,
+    "word/_rels/document.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/updown_chart.png"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    "word/styles.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:style w:type="paragraph" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:rFonts w:ascii="Microsoft YaHei" w:eastAsia="Microsoft YaHei"/><w:sz w:val="21"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="160"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="220" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/></w:rPr></w:style></w:styles>`,
+    "word/document.xml": buildDocumentXml(a),
+    "word/media/updown_chart.png": pngBytes
+  };
+  return new Blob([zipStore(files)], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+}
+function dataUrlToBytes(dataUrl) {
+  const bin = atob(dataUrl.split(",")[1]);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+function bytesOf(value) {
+  if (value instanceof Uint8Array) return value;
+  return new TextEncoder().encode(value);
+}
+function crc32(bytes) {
+  let crc = -1;
+  for (let i = 0; i < bytes.length; i++) {
+    crc ^= bytes[i];
+    for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (0xEDB88320 & -(crc & 1));
+  }
+  return (crc ^ -1) >>> 0;
+}
+function u16(n) { return [n & 255, (n >>> 8) & 255]; }
+function u32(n) { return [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]; }
+function dosTimeDate(date = new Date()) {
+  const time = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return [time, dosDate];
+}
+function zipStore(files) {
+  const chunks = [], central = [];
+  let offset = 0;
+  const [time, date] = dosTimeDate();
+  for (const [name, content] of Object.entries(files)) {
+    const nameBytes = bytesOf(name), data = bytesOf(content), crc = crc32(data);
+    const local = new Uint8Array([0x50,0x4b,0x03,0x04, ...u16(20), ...u16(0), ...u16(0), ...u16(time), ...u16(date), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(nameBytes.length), ...u16(0)]);
+    chunks.push(local, nameBytes, data);
+    central.push(new Uint8Array([0x50,0x4b,0x01,0x02, ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(time), ...u16(date), ...u32(crc), ...u32(data.length), ...u32(data.length), ...u16(nameBytes.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]), nameBytes);
+    offset += local.length + nameBytes.length + data.length;
+  }
+  const centralSize = central.reduce((s, c) => s + c.length, 0);
+  const end = new Uint8Array([0x50,0x4b,0x05,0x06, ...u16(0), ...u16(0), ...u16(Object.keys(files).length), ...u16(Object.keys(files).length), ...u32(centralSize), ...u32(offset), ...u16(0)]);
+  return new Blob([...chunks, ...central, end]);
+}
+function downloadBlob(blob, filename) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+function runSelfTests() {
+  const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
+  assert(gaoRequiredPairsFromCv(4.517 / 103.0) === 6, "Gao CV 查表失败");
+  assert(gaoRequiredPairsFromCv(0.0200) === 3, "Gao CV 边界 0.0200 失败");
+  assert(gaoRequiredPairsFromCv(0.0201) === 4, "Gao CV 边界 0.0201 失败");
+  let loads = [110, 105, 100, 105, 100], responses = [true, true, false, true, false];
+  let est = pairedUpdownEstimate(loads, responses, 5, true);
+  assert(est.startIndex === 1 && est.closed === true && est.nPairs === 2, "基础配对闭合样例失败");
+  assert(est.pairValues.every(v => almostEqual(v, 102.5)), "基础配对中点失败");
+  assert(est.valid === false, "零标准差应无效");
+  loads = [110, 105, 100, 105]; responses = [true, true, false, false];
+  est = pairedUpdownEstimate(loads, responses, 5, true);
+  assert(est.closed === false && est.nPairs === 2 && est.retrospectivePairs === 1, "回溯配对开放样例失败");
+  assert(JSON.stringify(est.pairIndices) === JSON.stringify([[1, 2], [0, 3]]), "回溯配对索引失败");
+  loads = [110, 105, 100, 105, 110]; responses = [true, true, false, false, true];
+  est = pairedUpdownEstimate(loads, responses, 5, true);
+  assert(est.closed === true && JSON.stringify(est.unmatchedIndices) === JSON.stringify([4]), "回溯闭合未配对样例失败");
+  const oneSide = dixonMoodEstimate([100, 105, 110], [false, false, false], 5);
+  assert(oneSide.valid === false, "单一响应组 Dixon 应无效");
+  return "自检通过：Gao 查表、闭合、回溯配对、单一响应组等基准场景均符合预期。";
+}
+
+function setStatus(text, error = false) {
+  $("statusText").textContent = text;
+  $("statusText").style.color = error ? "var(--bad)" : "var(--muted)";
+}
+function setup() {
+  $("addRowBtn").addEventListener("click", () => addRow($("dataBody").children.length + 1, "", ""));
+  $("clearRowsBtn").addEventListener("click", () => { $("dataBody").innerHTML = ""; for (let i = 1; i <= 8; i++) addRow(i); currentAnalysis = null; $("exportBtn").disabled = true; setStatus("已清空"); });
+  $("sampleBtn").addEventListener("click", () => { loadSample(); setStatus("已载入示例数据"); });
+  $("analyzeBtn").addEventListener("click", () => {
+    try {
+      setStatus("计算中...");
+      currentAnalysis = analyzeData();
+      renderAll(currentAnalysis);
+      $("exportBtn").disabled = false;
+      setStatus("计算完成");
+    } catch (err) {
+      setStatus(err.message, true);
+    }
+  });
+  $("exportBtn").addEventListener("click", () => {
+    try {
+      if (!currentAnalysis) currentAnalysis = analyzeData();
+      drawChart(currentAnalysis);
+      const blob = buildDocxBlob(currentAnalysis);
+      downloadBlob(blob, `updown_fatigue_report_${new Date().toISOString().slice(0, 10)}.docx`);
+      setStatus("Word 报告已生成");
+    } catch (err) { setStatus(err.message, true); }
+  });
+  $("testBtn").addEventListener("click", () => {
+    try { setStatus(runSelfTests()); } catch (err) { setStatus("自检失败：" + err.message, true); }
+  });
+  for (let i = 1; i <= 8; i++) addRow(i);
+  loadSample();
+  currentAnalysis = analyzeData();
+  renderAll(currentAnalysis);
+  $("exportBtn").disabled = false;
+  setStatus("示例数据已自动计算");
+}
+setup();
+</script>
+</body>
+</html>
