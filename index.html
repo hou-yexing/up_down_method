@@ -51,6 +51,9 @@ section, .panel {
   border-radius: 8px;
 }
 .left, .right { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.data-section { display: flex; flex-direction: column; min-height: 658px; }
+.data-section .body { flex: 1; display: flex; min-height: 0; }
+.data-section .table-wrap { flex: 1; max-height: none; }
 .section-head {
   padding: 14px 16px 10px;
   border-bottom: 1px solid var(--line);
@@ -173,6 +176,9 @@ canvas { width: 100%; max-width: 100%; border: 1px solid var(--line); border-rad
   main { grid-template-columns: 1fr; }
   .summary-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .method-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .data-section { display: block; min-height: auto; }
+  .data-section .body { display: block; }
+  .data-section .table-wrap { max-height: 440px; }
 }
 @media (max-width: 680px) {
   main { width: calc(100vw - 18px); }
@@ -195,7 +201,7 @@ canvas { width: 100%; max-width: 100%; border: 1px solid var(--line); border-rad
 </header>
 <main>
   <div class="left">
-    <section>
+    <section class="data-section">
       <div class="section-head">
         <h2>试验数据</h2>
         <div class="actions">
