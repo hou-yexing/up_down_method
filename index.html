@@ -38,11 +38,11 @@ header {
 header h1 { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
 header p { margin: 0; color: #c9d6e2; font-size: 13px; }
 main {
-  width: min(1500px, calc(100vw - 32px));
+  width: min(1700px, calc(100vw - 24px));
   margin: 18px auto 36px;
   display: grid;
-  grid-template-columns: minmax(360px, 470px) minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+  gap: 12px;
 }
 section, .panel {
   background: var(--panel);
@@ -98,21 +98,25 @@ th, td { border-bottom: 1px solid #e6ebf2; padding: 7px 8px; text-align: left; f
 th { position: sticky; top: 0; background: #f8fafc; color: #475467; z-index: 1; }
 td input { min-height: 30px; padding: 4px 6px; }
 td.row-tools { width: 48px; text-align: center; }
+.table-wrap th:nth-child(1), .table-wrap td:nth-child(1) { width: 58px; }
+.table-wrap th:nth-child(2), .table-wrap td:nth-child(2) { min-width: 132px; }
+.table-wrap th:nth-child(3), .table-wrap td:nth-child(3) { min-width: 112px; }
+.table-wrap td select { min-height: 30px; padding: 4px 6px; }
 .mini { padding: 5px 8px; min-height: 28px; font-size: 12px; }
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  gap: 7px;
 }
 .stat {
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 9px 10px;
+  padding: 8px 9px;
   background: #fbfcfe;
-  min-height: 64px;
+  min-height: 60px;
 }
 .stat .label { font-size: 11px; color: var(--muted); margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stat .value { font-size: 18px; font-weight: 800; color: #172033; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat .value { font-size: 16px; font-weight: 800; color: #172033; white-space: nowrap; overflow: visible; text-overflow: clip; }
 .badge {
   display: inline-flex;
   align-items: center;
